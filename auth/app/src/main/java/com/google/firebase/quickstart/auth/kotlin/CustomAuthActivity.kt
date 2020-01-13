@@ -1,7 +1,7 @@
 package com.google.firebase.quickstart.auth.kotlin
 
 import android.os.Bundle
-import android.support.v7.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatActivity
 import android.util.Log
 import android.view.View
 import android.widget.Toast
@@ -35,7 +35,7 @@ class CustomAuthActivity : AppCompatActivity(), View.OnClickListener {
         // Create token receiver (for demo purposes only)
         tokenReceiver = object : TokenBroadcastReceiver() {
             override fun onNewToken(token: String?) {
-                Log.d(CustomAuthActivity.TAG, "onNewToken:$token")
+                Log.d(TAG, "onNewToken:$token")
                 setCustomToken(token.toString())
             }
         }
@@ -90,9 +90,9 @@ class CustomAuthActivity : AppCompatActivity(), View.OnClickListener {
 
     private fun updateUI(user: FirebaseUser?) {
         if (user != null) {
-            textSignInStatus.text = "User ID: $user.uid"
+            textSignInStatus.text = getString(R.string.custom_auth_signin_status_user, user.uid)
         } else {
-            textSignInStatus.text = "Error: sign in failed"
+            textSignInStatus.text = getString(R.string.custom_auth_signin_status_failed)
         }
     }
 

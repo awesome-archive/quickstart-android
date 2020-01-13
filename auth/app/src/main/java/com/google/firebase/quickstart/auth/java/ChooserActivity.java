@@ -19,7 +19,6 @@ package com.google.firebase.quickstart.auth.java;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.v7.app.AppCompatActivity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -28,6 +27,8 @@ import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import androidx.appcompat.app.AppCompatActivity;
+
 import com.google.firebase.quickstart.auth.R;
 
 /**
@@ -35,38 +36,38 @@ import com.google.firebase.quickstart.auth.R;
  * contain any useful code related to Firebase Authentication. You may want to start with
  * one of the following Files:
  *     {@link GoogleSignInActivity}
- *     {@link FacebookLoginActivity}
- *     {@link TwitterLoginActivity}
+ *     {@link FacebookLoginActivity}}
  *     {@link EmailPasswordActivity}
  *     {@link PasswordlessActivity}
  *     {@link PhoneAuthActivity}
  *     {@link AnonymousAuthActivity}
  *     {@link CustomAuthActivity}
+ *     {@link GenericIdpActivity}
  */
 public class ChooserActivity extends AppCompatActivity implements AdapterView.OnItemClickListener {
 
     private static final Class[] CLASSES = new Class[]{
             GoogleSignInActivity.class,
             FacebookLoginActivity.class,
-            TwitterLoginActivity.class,
             EmailPasswordActivity.class,
             PasswordlessActivity.class,
             PhoneAuthActivity.class,
             AnonymousAuthActivity.class,
             FirebaseUIActivity.class,
-            CustomAuthActivity.class
+            CustomAuthActivity.class,
+            GenericIdpActivity.class,
     };
 
     private static final int[] DESCRIPTION_IDS = new int[] {
             R.string.desc_google_sign_in,
             R.string.desc_facebook_login,
-            R.string.desc_twitter_login,
             R.string.desc_emailpassword,
             R.string.desc_passwordless,
             R.string.desc_phone_auth,
             R.string.desc_anonymous_auth,
             R.string.desc_firebase_ui,
             R.string.desc_custom_auth,
+            R.string.desc_generic_idp,
     };
 
     @Override

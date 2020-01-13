@@ -2,10 +2,10 @@ package com.google.firebase.quickstart.database.kotlin
 
 import android.content.Intent
 import android.os.Bundle
-import android.support.v4.app.Fragment
-import android.support.v4.app.FragmentPagerAdapter
 import android.view.Menu
 import android.view.MenuItem
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentPagerAdapter
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.quickstart.database.R
 import com.google.firebase.quickstart.database.kotlin.fragment.MyPostsFragment
@@ -24,7 +24,7 @@ class MainActivity : BaseActivity() {
         setContentView(R.layout.activity_main)
 
         // Create the adapter that will return a fragment for each section
-        pagerAdapter = object : FragmentPagerAdapter(supportFragmentManager) {
+        pagerAdapter = object : FragmentPagerAdapter(supportFragmentManager, BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT) {
             private val fragments = arrayOf<Fragment>(
                     RecentPostsFragment(),
                     MyPostsFragment(),

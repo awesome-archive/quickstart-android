@@ -4,9 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.support.v4.app.ActivityCompat
-import android.support.v4.content.ContextCompat
-import android.support.v7.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.appcompat.app.AppCompatActivity
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -84,7 +84,7 @@ class ChooserActivity : AppCompatActivity(), ActivityCompat.OnRequestPermissions
             }
         }
 
-        if (!allNeededPermissions.isEmpty()) {
+        if (allNeededPermissions.isNotEmpty()) {
             ActivityCompat.requestPermissions(
                     this, allNeededPermissions.toTypedArray(), PERMISSION_REQUESTS)
         }

@@ -18,11 +18,11 @@ package com.google.firebase.quickstart.auth.java;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.design.widget.Snackbar;
 import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
+
+import androidx.annotation.NonNull;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
@@ -31,6 +31,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
+import com.google.android.material.snackbar.Snackbar;
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
@@ -63,6 +64,7 @@ public class GoogleSignInActivity extends BaseActivity implements
         // Views
         mStatusTextView = findViewById(R.id.status);
         mDetailTextView = findViewById(R.id.detail);
+        setProgressBar(R.id.progressBar);
 
         // Button listeners
         findViewById(R.id.signInButton).setOnClickListener(this);
@@ -122,7 +124,7 @@ public class GoogleSignInActivity extends BaseActivity implements
     private void firebaseAuthWithGoogle(GoogleSignInAccount acct) {
         Log.d(TAG, "firebaseAuthWithGoogle:" + acct.getId());
         // [START_EXCLUDE silent]
-        showProgressDialog();
+        showProgressBar();
         // [END_EXCLUDE]
 
         AuthCredential credential = GoogleAuthProvider.getCredential(acct.getIdToken(), null);
@@ -143,7 +145,7 @@ public class GoogleSignInActivity extends BaseActivity implements
                         }
 
                         // [START_EXCLUDE]
-                        hideProgressDialog();
+                        hideProgressBar();
                         // [END_EXCLUDE]
                     }
                 });
@@ -186,7 +188,7 @@ public class GoogleSignInActivity extends BaseActivity implements
     }
 
     private void updateUI(FirebaseUser user) {
-        hideProgressDialog();
+        hideProgressBar();
         if (user != null) {
             mStatusTextView.setText(getString(R.string.google_status_fmt, user.getEmail()));
             mDetailTextView.setText(getString(R.string.firebase_status_fmt, user.getUid()));

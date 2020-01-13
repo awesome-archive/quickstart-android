@@ -3,8 +3,8 @@ package com.google.samples.quickstart.appindexing.kotlin
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.support.v7.app.AppCompatActivity
 import android.util.Log
+import androidx.appcompat.app.AppCompatActivity
 // [START import_classes]
 import com.google.firebase.appindexing.FirebaseAppIndex
 import com.google.firebase.appindexing.FirebaseUserActions
@@ -36,6 +36,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
         val action = intent.action
         val data = intent.data
         if (Intent.ACTION_VIEW == action && data != null) {

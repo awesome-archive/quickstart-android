@@ -1,8 +1,8 @@
 package com.google.firebase.fiamquickstart.kotlin
 
 import android.os.Bundle
-import android.support.design.widget.Snackbar
-import android.support.v7.app.AppCompatActivity
+import com.google.android.material.snackbar.Snackbar
+import androidx.appcompat.app.AppCompatActivity
 import android.util.Log
 import com.google.android.gms.tasks.OnSuccessListener
 import com.google.firebase.analytics.FirebaseAnalytics
@@ -36,13 +36,11 @@ class KotlinMainActivity : AppCompatActivity() {
 
         // Get and display/log the Instance ID
         FirebaseInstanceId.getInstance().instanceId
-                .addOnSuccessListener(object : OnSuccessListener<InstanceIdResult> {
-                    override fun onSuccess(instanceIdResult: InstanceIdResult) {
-                        val instanceId = instanceIdResult.id
-                        instanceIdText.text = getString(R.string.instance_id_fmt, instanceId)
-                        Log.d(TAG, "InstanceId: $instanceId")
-                    }
-                })
+                .addOnSuccessListener { instanceIdResult ->
+                    val instanceId = instanceIdResult.id
+                    instanceIdText.text = getString(R.string.instance_id_fmt, instanceId)
+                    Log.d(TAG, "InstanceId: $instanceId")
+                }
     }
 
     companion object {

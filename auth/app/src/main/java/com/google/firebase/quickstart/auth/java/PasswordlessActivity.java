@@ -2,9 +2,6 @@ package com.google.firebase.quickstart.auth.java;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.design.widget.Snackbar;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
@@ -12,8 +9,12 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
+import com.google.android.material.snackbar.Snackbar;
 import com.google.firebase.auth.ActionCodeSettings;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
@@ -57,6 +58,8 @@ public class PasswordlessActivity extends BaseActivity implements View.OnClickLi
 
         mEmailField = findViewById(R.id.fieldEmail);
         mStatusText = findViewById(R.id.status);
+
+        setProgressBar(R.id.progressBar);
 
         mSendLinkButton.setOnClickListener(this);
         mSignInButton.setOnClickListener(this);
@@ -137,13 +140,13 @@ public class PasswordlessActivity extends BaseActivity implements View.OnClickLi
                 .build();
 
         hideKeyboard(mEmailField);
-        showProgressDialog();
+        showProgressBar();
 
         mAuth.sendSignInLinkToEmail(email, settings)
                 .addOnCompleteListener(new OnCompleteListener<Void>() {
                     @Override
                     public void onComplete(@NonNull Task<Void> task) {
-                        hideProgressDialog();
+                        hideProgressBar();
 
                         if (task.isSuccessful()) {
                             Log.d(TAG, "Link sent");
@@ -172,13 +175,13 @@ public class PasswordlessActivity extends BaseActivity implements View.OnClickLi
         Log.d(TAG, "signInWithLink:" + link);
 
         hideKeyboard(mEmailField);
-        showProgressDialog();
+        showProgressBar();
 
         mAuth.signInWithEmailLink(email, link)
                 .addOnCompleteListener(new OnCompleteListener<AuthResult>() {
                     @Override
                     public void onComplete(@NonNull Task<AuthResult> task) {
-                        hideProgressDialog();
+                        hideProgressBar();
                         mPendingEmail = null;
 
                         if (task.isSuccessful()) {
