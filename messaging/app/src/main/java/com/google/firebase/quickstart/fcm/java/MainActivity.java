@@ -16,32 +16,47 @@
 
 package com.google.firebase.quickstart.fcm.java;
 
+import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
-import android.widget.Button;
 import android.widget.Toast;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
-import com.google.firebase.iid.FirebaseInstanceId;
-import com.google.firebase.iid.InstanceIdResult;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.quickstart.fcm.R;
+import com.google.firebase.quickstart.fcm.databinding.ActivityMainBinding;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
+    private final ActivityResultLauncher<String> requestPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
+                if (isGranted) {
+                    Toast.makeText(this, "Notifications permission granted",Toast.LENGTH_SHORT)
+                            .show();
+                } else {
+                    Toast.makeText(this, "FCM can't post notifications without POST_NOTIFICATIONS permission",
+                            Toast.LENGTH_LONG).show();
+                }
+            });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        ActivityMainBinding binding = ActivityMainBinding.inflate(getLayoutInflater());
+        setContentView(binding.getRoot());
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // Create channel to show notifications.
@@ -70,8 +85,7 @@ public class MainActivity extends AppCompatActivity {
         }
         // [END handle_data_extras]
 
-        Button subscribeButton = findViewById(R.id.subscribeButton);
-        subscribeButton.setOnClickListener(new View.OnClickListener() {
+        binding.subscribeButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 Log.d(TAG, "Subscribing to weather topic");
@@ -92,33 +106,37 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        Button logTokenButton = findViewById(R.id.logTokenButton);
-        logTokenButton.setOnClickListener(new View.OnClickListener() {
+        binding.logRegistrationButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // Get token
-                // [START retrieve_current_token]
-                FirebaseInstanceId.getInstance().getInstanceId()
-                        .addOnCompleteListener(new OnCompleteListener<InstanceIdResult>() {
-                            @Override
-                            public void onComplete(@NonNull Task<InstanceIdResult> task) {
-                                if (!task.isSuccessful()) {
-                                    Log.w(TAG, "getInstanceId failed", task.getException());
-                                    return;
-                                }
+                // Get FCM Registration
+                // [START log_reg]
+                FirebaseMessaging.getInstance().register()
+                    .addOnCompleteListener(task -> {
+                      if (!task.isSuccessful()) {
+                        Log.w(TAG, "Fetching FCM registration failed", task.getException());
+                      }
 
-                                // Get new Instance ID token
-                                String token = task.getResult().getToken();
-
-                                // Log and toast
-                                String msg = getString(R.string.msg_token_fmt, token);
-                                Log.d(TAG, msg);
-                                Toast.makeText(MainActivity.this, msg, Toast.LENGTH_SHORT).show();
-                            }
-                        });
-                // [END retrieve_current_token]
+                      // If the registration task is success, the onRegistered callback in
+                      // FirebaseMessagingService will be invoked and the registration will be logged from there.
+                    });
+                // [END log_reg]
             }
         });
+
+        askNotificationPermission();
     }
 
+    private void askNotificationPermission() {
+        // This is only necessary for API Level > 33 (TIRAMISU)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+                    PackageManager.PERMISSION_GRANTED) {
+                // FCM SDK (and your app) can post notifications.
+            } else {
+                // Directly ask for the permission
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        }
+    }
 }

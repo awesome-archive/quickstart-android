@@ -1,30 +1,30 @@
 package com.google.firebase.quickstart.firebasestorage.kotlin
 
-import android.app.Activity
-import android.app.ProgressDialog
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.support.v4.content.LocalBroadcastManager
-import android.support.v7.app.AlertDialog
-import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.auth
+import com.google.firebase.Firebase
 import com.google.firebase.quickstart.firebasestorage.R
-import kotlinx.android.synthetic.main.activity_main.buttonCamera
-import kotlinx.android.synthetic.main.activity_main.buttonDownload
-import kotlinx.android.synthetic.main.activity_main.buttonSignIn
-import kotlinx.android.synthetic.main.activity_main.layoutDownload
-import kotlinx.android.synthetic.main.activity_main.layoutSignin
-import kotlinx.android.synthetic.main.activity_main.layoutStorage
-import kotlinx.android.synthetic.main.activity_main.pictureDownloadUri
+import com.google.firebase.quickstart.firebasestorage.databinding.ActivityMainBinding
 import java.util.Locale
 
 /**
@@ -37,31 +37,56 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private lateinit var broadcastReceiver: BroadcastReceiver
     private lateinit var auth: FirebaseAuth
-    private lateinit var progressDialog: ProgressDialog
 
     private var downloadUrl: Uri? = null
     private var fileUri: Uri? = null
 
+    private lateinit var binding: ActivityMainBinding
+
+    private lateinit var cameraIntent: ActivityResultLauncher<Array<String>>
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            Toast.makeText(this, "Notifications permission granted", Toast.LENGTH_SHORT)
+                .show()
+        } else {
+            Toast.makeText(
+                this,
+                "Can't post notifications without POST_NOTIFICATIONS permission",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         // Initialize Firebase Auth
-        auth = FirebaseAuth.getInstance()
+        auth = Firebase.auth
 
         // Click listeners
-        buttonCamera.setOnClickListener(this)
-        buttonSignIn.setOnClickListener(this)
-        buttonDownload.setOnClickListener(this)
+        with(binding) {
+            buttonCamera.setOnClickListener(this@MainActivity)
+            buttonSignIn.setOnClickListener(this@MainActivity)
+            buttonDownload.setOnClickListener(this@MainActivity)
+        }
 
-        progressDialog = ProgressDialog(this)
-        progressDialog.isIndeterminate = true
+        cameraIntent = registerForActivityResult(ActivityResultContracts.OpenDocument()) { fileUri ->
+            if (fileUri != null) {
+                uploadFromUri(fileUri)
+            } else {
+                Log.w(TAG, "File URI is null")
+            }
+        }
 
         // Local broadcast receiver
         broadcastReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 Log.d(TAG, "onReceive:$intent")
-                hideProgressDialog()
+                hideProgressBar()
 
                 when (intent.action) {
                     MyDownloadService.DOWNLOAD_COMPLETED -> {
@@ -69,16 +94,26 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                         val numBytes = intent.getLongExtra(MyDownloadService.EXTRA_BYTES_DOWNLOADED, 0)
 
                         // Alert success
-                        showMessageDialog(getString(R.string.success), String.format(Locale.getDefault(),
+                        showMessageDialog(
+                            getString(R.string.success),
+                            String.format(
+                                Locale.getDefault(),
                                 "%d bytes downloaded from %s",
                                 numBytes,
-                                intent.getStringExtra(MyDownloadService.EXTRA_DOWNLOAD_PATH)))
+                                intent.getStringExtra(MyDownloadService.EXTRA_DOWNLOAD_PATH),
+                            ),
+                        )
                     }
                     MyDownloadService.DOWNLOAD_ERROR ->
                         // Alert failure
-                        showMessageDialog("Error", String.format(Locale.getDefault(),
+                        showMessageDialog(
+                            "Error",
+                            String.format(
+                                Locale.getDefault(),
                                 "Failed to download from %s",
-                                intent.getStringExtra(MyDownloadService.EXTRA_DOWNLOAD_PATH)))
+                                intent.getStringExtra(MyDownloadService.EXTRA_DOWNLOAD_PATH),
+                            ),
+                        )
                     MyUploadService.UPLOAD_COMPLETED, MyUploadService.UPLOAD_ERROR -> onUploadResultIntent(intent)
                 }
             }
@@ -90,6 +125,8 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             downloadUrl = it.getParcelable(KEY_DOWNLOAD_URL)
         }
         onNewIntent(intent)
+
+        askNotificationPermission()
     }
 
     public override fun onNewIntent(intent: Intent) {
@@ -124,23 +161,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         out.putParcelable(KEY_DOWNLOAD_URL, downloadUrl)
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        Log.d(TAG, "onActivityResult:$requestCode:$resultCode:$data")
-        if (requestCode == RC_TAKE_PICTURE) {
-            if (resultCode == Activity.RESULT_OK) {
-                fileUri = data?.data
-
-                if (fileUri != null) {
-                    uploadFromUri(fileUri!!)
-                } else {
-                    Log.w(TAG, "File URI is null")
-                }
-            } else {
-                Toast.makeText(this, "Taking picture failed.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
     private fun uploadFromUri(uploadUri: Uri) {
         Log.d(TAG, "uploadFromUri:src: $uploadUri")
 
@@ -153,12 +173,14 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
         // Start MyUploadService to upload the file, so that the file is uploaded
         // even if this Activity is killed or put in the background
-        startService(Intent(this, MyUploadService::class.java)
+        startService(
+            Intent(this, MyUploadService::class.java)
                 .putExtra(MyUploadService.EXTRA_FILE_URI, uploadUri)
-                .setAction(MyUploadService.ACTION_UPLOAD))
+                .setAction(MyUploadService.ACTION_UPLOAD),
+        )
 
         // Show loading spinner
-        showProgressDialog(getString(R.string.progress_uploading))
+        showProgressBar(getString(R.string.progress_uploading))
     }
 
     private fun beginDownload() {
@@ -168,12 +190,12 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
             // Kick off MyDownloadService to download the file
             val intent = Intent(this, MyDownloadService::class.java)
-                    .putExtra(MyDownloadService.EXTRA_DOWNLOAD_PATH, path)
-                    .setAction(MyDownloadService.ACTION_DOWNLOAD)
+                .putExtra(MyDownloadService.EXTRA_DOWNLOAD_PATH, path)
+                .setAction(MyDownloadService.ACTION_DOWNLOAD)
             startService(intent)
 
             // Show loading spinner
-            showProgressDialog(getString(R.string.progress_downloading))
+            showProgressBar(getString(R.string.progress_downloading))
         }
     }
 
@@ -181,25 +203,23 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         Log.d(TAG, "launchCamera")
 
         // Pick an image from storage
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
-        intent.type = "image/*"
-        startActivityForResult(intent, RC_TAKE_PICTURE)
+        cameraIntent.launch(arrayOf("image/*"))
     }
 
     private fun signInAnonymously() {
         // Sign in anonymously. Authentication is required to read or write from Firebase Storage.
-        showProgressDialog(getString(R.string.progress_auth))
+        showProgressBar(getString(R.string.progress_auth))
         auth.signInAnonymously()
-                .addOnSuccessListener(this) { authResult ->
-                    Log.d(TAG, "signInAnonymously:SUCCESS")
-                    hideProgressDialog()
-                    updateUI(authResult.user)
-                }
-                .addOnFailureListener(this) { exception ->
-                    Log.e(TAG, "signInAnonymously:FAILURE", exception)
-                    hideProgressDialog()
-                    updateUI(null)
-                }
+            .addOnSuccessListener(this) { authResult ->
+                Log.d(TAG, "signInAnonymously:SUCCESS")
+                hideProgressBar()
+                updateUI(authResult.user)
+            }
+            .addOnFailureListener(this) { exception ->
+                Log.e(TAG, "signInAnonymously:FAILURE", exception)
+                hideProgressBar()
+                updateUI(null)
+            }
     }
 
     private fun onUploadResultIntent(intent: Intent) {
@@ -211,41 +231,60 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
     private fun updateUI(user: FirebaseUser?) {
-        // Signed in or Signed out
-        if (user != null) {
-            layoutSignin.visibility = View.GONE
-            layoutStorage.visibility = View.VISIBLE
-        } else {
-            layoutSignin.visibility = View.VISIBLE
-            layoutStorage.visibility = View.GONE
-        }
+        with(binding) {
+            // Signed in or Signed out
+            if (user != null) {
+                layoutSignin.visibility = View.GONE
+                layoutStorage.visibility = View.VISIBLE
+            } else {
+                layoutSignin.visibility = View.VISIBLE
+                layoutStorage.visibility = View.GONE
+            }
 
-        // Download URL and Download button
-        if (downloadUrl != null) {
-            pictureDownloadUri.text = downloadUrl.toString()
-            layoutDownload.visibility = View.VISIBLE
-        } else {
-            pictureDownloadUri.text = null
-            layoutDownload.visibility = View.GONE
+            // Download URL and Download button
+            if (downloadUrl != null) {
+                pictureDownloadUri.text = downloadUrl.toString()
+                layoutDownload.visibility = View.VISIBLE
+            } else {
+                pictureDownloadUri.text = null
+                layoutDownload.visibility = View.GONE
+            }
         }
     }
 
     private fun showMessageDialog(title: String, message: String) {
         val ad = AlertDialog.Builder(this)
-                .setTitle(title)
-                .setMessage(message)
-                .create()
+            .setTitle(title)
+            .setMessage(message)
+            .create()
         ad.show()
     }
 
-    private fun showProgressDialog(caption: String) {
-        progressDialog.setMessage(caption)
-        progressDialog.show()
+    private fun showProgressBar(progressCaption: String) {
+        with(binding) {
+            caption.text = progressCaption
+            progressBar.visibility = View.VISIBLE
+        }
     }
 
-    private fun hideProgressDialog() {
-        if (progressDialog.isShowing) {
-            progressDialog.dismiss()
+    private fun hideProgressBar() {
+        with(binding) {
+            caption.text = ""
+            progressBar.visibility = View.INVISIBLE
+        }
+    }
+
+    private fun askNotificationPermission() {
+        // This is only necessary for API Level > 33 (TIRAMISU)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                // Your app can post notifications.
+            } else {
+                // Directly ask for the permission
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
         }
     }
 
@@ -256,18 +295,17 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         val i = item.itemId
-        if (i == R.id.action_logout) {
+        return if (i == R.id.action_logout) {
             FirebaseAuth.getInstance().signOut()
             updateUI(null)
-            return true
+            true
         } else {
-            return super.onOptionsItemSelected(item)
+            super.onOptionsItemSelected(item)
         }
     }
 
     override fun onClick(v: View) {
-        val i = v.id
-        when (i) {
+        when (v.id) {
             R.id.buttonCamera -> launchCamera()
             R.id.buttonSignIn -> signInAnonymously()
             R.id.buttonDownload -> beginDownload()
@@ -277,8 +315,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     companion object {
 
         private const val TAG = "Storage#MainActivity"
-
-        private const val RC_TAKE_PICTURE = 101
 
         private const val KEY_FILE_URI = "key_file_uri"
         private const val KEY_DOWNLOAD_URL = "key_download_url"

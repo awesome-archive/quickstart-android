@@ -16,22 +16,27 @@
 
 package com.google.firebase.quickstart.firebasestorage.java;
 
-import android.app.ProgressDialog;
+import android.Manifest;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.content.LocalBroadcastManager;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
@@ -39,6 +44,7 @@ import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.quickstart.firebasestorage.R;
+import com.google.firebase.quickstart.firebasestorage.databinding.ActivityMainBinding;
 
 import java.util.Locale;
 
@@ -52,30 +58,43 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private static final String TAG = "Storage#MainActivity";
 
-    private static final int RC_TAKE_PICTURE = 101;
-
     private static final String KEY_FILE_URI = "key_file_uri";
     private static final String KEY_DOWNLOAD_URL = "key_download_url";
 
     private BroadcastReceiver mBroadcastReceiver;
-    private ProgressDialog mProgressDialog;
     private FirebaseAuth mAuth;
 
     private Uri mDownloadUrl = null;
     private Uri mFileUri = null;
 
+    private ActivityMainBinding binding;
+
+    private ActivityResultLauncher<String[]> intentLauncher;
+    private final ActivityResultLauncher<String> requestPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
+                if (isGranted) {
+                    Toast.makeText(this, "Notifications permission granted", Toast.LENGTH_SHORT)
+                            .show();
+                } else {
+                    Toast.makeText(this,
+                            "Can't post notifications without POST_NOTIFICATIONS permission",
+                            Toast.LENGTH_LONG).show();
+                }
+            });
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        binding = ActivityMainBinding.inflate(getLayoutInflater());
+        setContentView(binding.getRoot());
 
         // Initialize Firebase Auth
         mAuth = FirebaseAuth.getInstance();
 
         // Click listeners
-        findViewById(R.id.buttonCamera).setOnClickListener(this);
-        findViewById(R.id.buttonSignIn).setOnClickListener(this);
-        findViewById(R.id.buttonDownload).setOnClickListener(this);
+        binding.buttonCamera.setOnClickListener(this);
+        binding.buttonSignIn.setOnClickListener(this);
+        binding.buttonDownload.setOnClickListener(this);
 
         // Restore instance state
         if (savedInstanceState != null) {
@@ -84,12 +103,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
         onNewIntent(getIntent());
 
+        intentLauncher = registerForActivityResult(
+                new ActivityResultContracts.OpenDocument(), fileUri -> {
+                    if (fileUri != null) {
+                        uploadFromUri(fileUri);
+                    } else {
+                        Log.w(TAG, "File URI is null");
+                    }
+                });
+
         // Local broadcast receiver
         mBroadcastReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 Log.d(TAG, "onReceive:" + intent);
-                hideProgressDialog();
+                hideProgressBar();
 
                 switch (intent.getAction()) {
                     case MyDownloadService.DOWNLOAD_COMPLETED:
@@ -115,6 +143,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 }
             }
         };
+
+        askNotificationPermission();
     }
 
     @Override
@@ -154,24 +184,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         out.putParcelable(KEY_DOWNLOAD_URL, mDownloadUrl);
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        Log.d(TAG, "onActivityResult:" + requestCode + ":" + resultCode + ":" + data);
-        if (requestCode == RC_TAKE_PICTURE) {
-            if (resultCode == RESULT_OK) {
-                mFileUri = data.getData();
-
-                if (mFileUri != null) {
-                    uploadFromUri(mFileUri);
-                } else {
-                    Log.w(TAG, "File URI is null");
-                }
-            } else {
-                Toast.makeText(this, "Taking picture failed.", Toast.LENGTH_SHORT).show();
-            }
-        }
-    }
-
     private void uploadFromUri(Uri fileUri) {
         Log.d(TAG, "uploadFromUri:src:" + fileUri.toString());
 
@@ -189,7 +201,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 .setAction(MyUploadService.ACTION_UPLOAD));
 
         // Show loading spinner
-        showProgressDialog(getString(R.string.progress_uploading));
+        showProgressBar(getString(R.string.progress_uploading));
     }
 
     private void beginDownload() {
@@ -203,27 +215,25 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         startService(intent);
 
         // Show loading spinner
-        showProgressDialog(getString(R.string.progress_downloading));
+        showProgressBar(getString(R.string.progress_downloading));
     }
 
     private void launchCamera() {
         Log.d(TAG, "launchCamera");
 
         // Pick an image from storage
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.setType("image/*");
-        startActivityForResult(intent, RC_TAKE_PICTURE);
+        intentLauncher.launch(new String[]{ "image/*" });
     }
 
     private void signInAnonymously() {
         // Sign in anonymously. Authentication is required to read or write from Firebase Storage.
-        showProgressDialog(getString(R.string.progress_auth));
+        showProgressBar(getString(R.string.progress_auth));
         mAuth.signInAnonymously()
                 .addOnSuccessListener(this, new OnSuccessListener<AuthResult>() {
                     @Override
                     public void onSuccess(AuthResult authResult) {
                         Log.d(TAG, "signInAnonymously:SUCCESS");
-                        hideProgressDialog();
+                        hideProgressBar();
                         updateUI(authResult.getUser());
                     }
                 })
@@ -231,7 +241,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     @Override
                     public void onFailure(@NonNull Exception exception) {
                         Log.e(TAG, "signInAnonymously:FAILURE", exception);
-                        hideProgressDialog();
+                        hideProgressBar();
                         updateUI(null);
                     }
                 });
@@ -248,22 +258,20 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private void updateUI(FirebaseUser user) {
         // Signed in or Signed out
         if (user != null) {
-            findViewById(R.id.layoutSignin).setVisibility(View.GONE);
-            findViewById(R.id.layoutStorage).setVisibility(View.VISIBLE);
+            binding.layoutSignin.setVisibility(View.GONE);
+            binding.layoutStorage.setVisibility(View.VISIBLE);
         } else {
-            findViewById(R.id.layoutSignin).setVisibility(View.VISIBLE);
-            findViewById(R.id.layoutStorage).setVisibility(View.GONE);
+            binding.layoutSignin.setVisibility(View.VISIBLE);
+            binding.layoutStorage.setVisibility(View.GONE);
         }
 
         // Download URL and Download button
         if (mDownloadUrl != null) {
-            ((TextView) findViewById(R.id.pictureDownloadUri))
-                    .setText(mDownloadUrl.toString());
-            findViewById(R.id.layoutDownload).setVisibility(View.VISIBLE);
+            binding.pictureDownloadUri.setText(mDownloadUrl.toString());
+            binding.layoutDownload.setVisibility(View.VISIBLE);
         } else {
-            ((TextView) findViewById(R.id.pictureDownloadUri))
-                    .setText(null);
-            findViewById(R.id.layoutDownload).setVisibility(View.GONE);
+            binding.pictureDownloadUri.setText(null);
+            binding.layoutDownload.setVisibility(View.GONE);
         }
     }
 
@@ -275,19 +283,26 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         ad.show();
     }
 
-    private void showProgressDialog(String caption) {
-        if (mProgressDialog == null) {
-            mProgressDialog = new ProgressDialog(this);
-            mProgressDialog.setIndeterminate(true);
-        }
-
-        mProgressDialog.setMessage(caption);
-        mProgressDialog.show();
+    private void showProgressBar(String caption) {
+        binding.caption.setText(caption);
+        binding.progressBar.setVisibility(View.VISIBLE);
     }
 
-    private void hideProgressDialog() {
-        if (mProgressDialog != null && mProgressDialog.isShowing()) {
-            mProgressDialog.dismiss();
+    private void hideProgressBar() {
+        binding.caption.setText("");
+        binding.progressBar.setVisibility(View.INVISIBLE);
+    }
+
+    private void askNotificationPermission() {
+        // This is only necessary for API level >= 33 (TIRAMISU)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+                    PackageManager.PERMISSION_GRANTED) {
+                // Your app can post notifications.
+            } else{
+                // Directly ask for the permission
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
+            }
         }
     }
 

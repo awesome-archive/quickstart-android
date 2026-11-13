@@ -1,36 +1,37 @@
 package com.google.firebase.quickstart.perfmon.java;
 
 import android.graphics.drawable.ColorDrawable;
-import android.os.AsyncTask;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.app.AppCompatActivity;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.appcompat.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
-import android.widget.Button;
-import android.widget.ImageView;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.resource.drawable.GlideDrawable;
+import com.bumptech.glide.load.DataSource;
+import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.Target;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
-import com.google.android.gms.tasks.Tasks;
+import com.google.android.gms.tasks.TaskCompletionSource;
 import com.google.firebase.perf.FirebasePerformance;
 import com.google.firebase.perf.metrics.Trace;
 import com.google.firebase.quickstart.perfmon.R;
+import com.google.firebase.quickstart.perfmon.databinding.ActivityMainBinding;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Random;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
@@ -40,8 +41,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String IMAGE_URL =
             "https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png";
 
-    private ImageView mHeader;
-    private TextView mContent;
     private Trace mTrace;
 
     private String STARTUP_TRACE_NAME = "startup_trace";
@@ -49,15 +48,15 @@ public class MainActivity extends AppCompatActivity {
     private String FILE_SIZE_COUNTER_NAME = "file size";
     private CountDownLatch mNumStartupTasks = new CountDownLatch(2);
 
+    private ActivityMainBinding binding;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        binding = ActivityMainBinding.inflate(getLayoutInflater());
+        setContentView(binding.getRoot());
 
-        mHeader = findViewById(R.id.headerIcon);
-        mContent = findViewById(R.id.textViewContent);
-        Button button = findViewById(R.id.button);
-        button.setOnClickListener(new View.OnClickListener() {
+        binding.button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 // write 40 chars of random text to file
@@ -114,65 +113,71 @@ public class MainActivity extends AppCompatActivity {
         Glide.with(this).
                 load(IMAGE_URL)
                 .placeholder(new ColorDrawable(ContextCompat.getColor(this, R.color.colorAccent)))
-                .listener(new RequestListener<String, GlideDrawable>() {
+                .listener(new RequestListener<Drawable>() {
                     @Override
-                    public boolean onException(
-                            Exception e, String model, Target<GlideDrawable> target,
-                            boolean isFirstResource) {
-                        mNumStartupTasks.countDown(); // Signal end of image load task.
+                    public boolean onLoadFailed(@Nullable GlideException e, Object model, Target<Drawable> target, boolean isFirstResource) {
+                        mNumStartupTasks.countDown();
                         return false;
                     }
 
                     @Override
-                    public boolean onResourceReady(
-                            GlideDrawable resource, String model, Target<GlideDrawable> target,
-                            boolean isFromMemoryCache, boolean isFirstResource) {
-                        mNumStartupTasks.countDown(); // Signal end of image load task.
+                    public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
+                        mNumStartupTasks.countDown();
                         return false;
                     }
-                }).into(mHeader);
+                }).into(binding.headerIcon);
     }
 
     private Task<Void> writeStringToFile(final String filename, final String content) {
-        return Tasks.call(
-                AsyncTask.THREAD_POOL_EXECUTOR,
-                new Callable<Void>() {
-                    @Override
-                    public Void call() throws Exception {
-                        FileOutputStream fos = new FileOutputStream(filename, true);
-                        fos.write(content.getBytes());
-                        fos.close();
-                        return null;
-                    }
-                });
+        final TaskCompletionSource<Void> taskCompletionSource = new TaskCompletionSource<>();
+        Executors.newSingleThreadExecutor().execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    FileOutputStream fos = new FileOutputStream(filename, true);
+                    fos.write(content.getBytes());
+                    fos.close();
+                    taskCompletionSource.setResult(null);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+            }
+        });
+        return taskCompletionSource.getTask();
     }
 
     private Task<String> loadStringFromFile() {
-        return Tasks.call(
-                AsyncTask.THREAD_POOL_EXECUTOR,
-                new Callable<String>() {
-                    @Override
-                    public String call() throws Exception {
-                        File contentFile = new File(getFilesDir(), CONTENT_FILE);
-                        if (contentFile.createNewFile()) {
-                            // Content file exist did not exist in internal storage and new file was created.
-                            // Copy in the default content.
-                            InputStream is;
-                            is = getAssets().open(DEFAULT_CONTENT_FILE);
-                            int size = is.available();
-                            byte[] buffer = new byte[size];
-                            is.read(buffer);
-                            is.close();
-                            FileOutputStream fos = new FileOutputStream(contentFile);
-                            fos.write(buffer);
-                            fos.close();
-                        }
-                        FileInputStream fis = new FileInputStream(contentFile);
-                        byte[] content = new byte[(int) contentFile.length()];
-                        fis.read(content);
-                        return new String(content);
+        final TaskCompletionSource<String> taskCompletionSource = new TaskCompletionSource<>();
+        Executors.newSingleThreadExecutor().execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    File contentFile = new File(getFilesDir(), CONTENT_FILE);
+                    if (contentFile.createNewFile()) {
+                        // Content file exist did not exist in internal storage and new file was created.
+                        // Copy in the default content.
+                        InputStream is;
+                        is = getAssets().open(DEFAULT_CONTENT_FILE);
+                        int size = is.available();
+                        byte[] buffer = new byte[size];
+                        is.read(buffer);
+                        is.close();
+                        FileOutputStream fos = new FileOutputStream(contentFile);
+                        fos.write(buffer);
+                        fos.close();
                     }
-                });
+                    FileInputStream fis = new FileInputStream(contentFile);
+                    byte[] content = new byte[(int) contentFile.length()];
+                    fis.read(content);
+                    taskCompletionSource.setResult(new String(content));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+            }
+        });
+        return taskCompletionSource.getTask();
     }
 
     private void loadFileFromDisk() {
@@ -189,7 +194,7 @@ public class MainActivity extends AppCompatActivity {
                         }
 
                         String fileContent = task.getResult();
-                        mContent.setText(task.getResult());
+                        binding.textViewContent.setText(task.getResult());
                         // Increment a counter with the file size that was read.
                         Log.d(TAG, "Incrementing file size counter in trace");
                         mTrace.incrementMetric(FILE_SIZE_COUNTER_NAME, fileContent.getBytes().length);

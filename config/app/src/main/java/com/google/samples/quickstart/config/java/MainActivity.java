@@ -22,19 +22,23 @@
 package com.google.samples.quickstart.config.java;
 
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v7.app.AppCompatActivity;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import android.util.Log;
 import android.view.View;
-import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig;
+import com.google.firebase.remoteconfig.FirebaseRemoteConfigException;
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings;
-import com.google.samples.quickstart.config.BuildConfig;
 import com.google.samples.quickstart.config.R;
+import com.google.samples.quickstart.config.databinding.ActivityMainBinding;
+import com.google.firebase.remoteconfig.ConfigUpdateListener;
+import com.google.firebase.remoteconfig.ConfigUpdate;
+
 
 public class MainActivity extends AppCompatActivity {
 
@@ -46,17 +50,17 @@ public class MainActivity extends AppCompatActivity {
     private static final String WELCOME_MESSAGE_CAPS_KEY = "welcome_message_caps";
 
     private FirebaseRemoteConfig mFirebaseRemoteConfig;
+    private ActivityMainBinding mBinding;
     private TextView mWelcomeTextView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        mBinding = ActivityMainBinding.inflate(getLayoutInflater());
+        setContentView(mBinding.getRoot());
 
-        mWelcomeTextView = findViewById(R.id.welcomeTextView);
-
-        Button fetchButton = findViewById(R.id.fetchButton);
-        fetchButton.setOnClickListener(new View.OnClickListener() {
+        mWelcomeTextView = mBinding.welcomeTextView;
+        mBinding.fetchButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 fetchWelcome();
@@ -69,13 +73,13 @@ public class MainActivity extends AppCompatActivity {
         // [END get_remote_config_instance]
 
         // Create a Remote Config Setting to enable developer mode, which you can use to increase
-        // the number of fetches available per hour during development. See Best Practices in the
-        // README for more information.
+        // the number of fetches available per hour during development. Also use Remote Config
+        // Setting to set the minimum fetch interval.
         // [START enable_dev_mode]
         FirebaseRemoteConfigSettings configSettings = new FirebaseRemoteConfigSettings.Builder()
-                .setDeveloperModeEnabled(BuildConfig.DEBUG)
+                .setMinimumFetchIntervalInSeconds(3600)
                 .build();
-        mFirebaseRemoteConfig.setConfigSettings(configSettings);
+        mFirebaseRemoteConfig.setConfigSettingsAsync(configSettings);
         // [END enable_dev_mode]
 
         // Set default Remote Config parameter values. An app uses the in-app default values, and
@@ -83,8 +87,31 @@ public class MainActivity extends AppCompatActivity {
         // want to change in the Firebase console. See Best Practices in the README for more
         // information.
         // [START set_default_values]
-        mFirebaseRemoteConfig.setDefaults(R.xml.remote_config_defaults);
+        mFirebaseRemoteConfig.setDefaultsAsync(R.xml.remote_config_defaults);
         // [END set_default_values]
+
+        // [START add_config_update_listener]
+        mFirebaseRemoteConfig.addOnConfigUpdateListener(new ConfigUpdateListener() {
+            @Override
+            public void onUpdate(ConfigUpdate configUpdate) {
+                Log.d(TAG, "Updated keys: " + configUpdate.getUpdatedKeys());
+
+                if (configUpdate.getUpdatedKeys().contains(WELCOME_MESSAGE_KEY)) {
+                    mFirebaseRemoteConfig.activate().addOnCompleteListener(new OnCompleteListener<Boolean>() {
+                        @Override
+                        public void onComplete(@NonNull Task<Boolean> task) {
+                            displayWelcomeMessage();
+                        }
+                    });
+                }
+            }
+
+            @Override
+            public void onError(FirebaseRemoteConfigException error) {
+                Log.w(TAG, "Config update error with code: " + error.getCode(), error);
+            }
+        });
+        // [END add_config_update_listener]
 
         fetchWelcome();
     }
@@ -95,31 +122,19 @@ public class MainActivity extends AppCompatActivity {
     private void fetchWelcome() {
         mWelcomeTextView.setText(mFirebaseRemoteConfig.getString(LOADING_PHRASE_CONFIG_KEY));
 
-        long cacheExpiration = 3600; // 1 hour in seconds.
-        // If your app is using developer mode, cacheExpiration is set to 0, so each fetch will
-        // retrieve values from the service.
-        if (mFirebaseRemoteConfig.getInfo().getConfigSettings().isDeveloperModeEnabled()) {
-            cacheExpiration = 0;
-        }
-
         // [START fetch_config_with_callback]
-        // cacheExpirationSeconds is set to cacheExpiration here, indicating the next fetch request
-        // will use fetch data from the Remote Config service, rather than cached parameter values,
-        // if cached parameter values are more than cacheExpiration seconds old.
-        // See Best Practices in the README for more information.
-        mFirebaseRemoteConfig.fetch(cacheExpiration)
-                .addOnCompleteListener(this, new OnCompleteListener<Void>() {
+        mFirebaseRemoteConfig.fetchAndActivate()
+                .addOnCompleteListener(this, new OnCompleteListener<Boolean>() {
                     @Override
-                    public void onComplete(@NonNull Task<Void> task) {
+                    public void onComplete(@NonNull Task<Boolean> task) {
                         if (task.isSuccessful()) {
-                            Toast.makeText(MainActivity.this, "Fetch Succeeded",
+                            boolean updated = task.getResult();
+                            Log.d(TAG, "Config params updated: " + updated);
+                            Toast.makeText(MainActivity.this, "Fetch and activate succeeded",
                                     Toast.LENGTH_SHORT).show();
 
-                            // After config data is successfully fetched, it must be activated before newly fetched
-                            // values are returned.
-                            mFirebaseRemoteConfig.activateFetched();
                         } else {
-                            Toast.makeText(MainActivity.this, "Fetch Failed",
+                            Toast.makeText(MainActivity.this, "Fetch failed",
                                     Toast.LENGTH_SHORT).show();
                         }
                         displayWelcomeMessage();

@@ -16,18 +16,29 @@
 
 package com.google.samples.quickstart.functions.java;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.design.widget.Snackbar;
-import android.support.v7.app.AppCompatActivity;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+
+import com.firebase.ui.auth.FirebaseAuthUIActivityResultContract;
+import com.firebase.ui.auth.data.model.FirebaseAuthUIAuthenticationResult;
+import com.google.android.material.snackbar.Snackbar;
+
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.Button;
-import android.widget.EditText;
+import android.widget.Toast;
 
 import com.firebase.ui.auth.AuthUI;
 import com.firebase.ui.auth.IdpResponse;
@@ -39,6 +50,7 @@ import com.google.firebase.functions.FirebaseFunctions;
 import com.google.firebase.functions.FirebaseFunctionsException;
 import com.google.firebase.functions.HttpsCallableResult;
 import com.google.samples.quickstart.functions.R;
+import com.google.samples.quickstart.functions.databinding.ActivityMainBinding;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -46,7 +58,7 @@ import java.util.Map;
 
 /**
  * This activity demonstrates the Android SDK for Callable Functions.
- *
+ * <p>
  * For more information, see the documentation for Cloud Functions for Firebase:
  * https://firebase.google.com/docs/functions/
  */
@@ -54,45 +66,39 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     private static final String TAG = "MainActivity";
 
-    private static final int RC_SIGN_IN = 9001;
-
-    // Add number views
-    private EditText mFirstNumberField;
-    private EditText mSecondNumberField;
-    private EditText mAddResultField;
-    private Button mCalculateButton;
-
-    // Add message views
-    private EditText mMessageInputField;
-    private EditText mMessageOutputField;
-    private Button mAddMessageButton;
-    private Button mSignInButton;
+    private ActivityMainBinding binding;
 
     // [START define_functions_instance]
     private FirebaseFunctions mFunctions;
     // [END define_functions_instance]
 
+    private final ActivityResultLauncher<String> requestPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
+                if (isGranted) {
+                    Toast.makeText(this, "Notifications permission granted", Toast.LENGTH_SHORT)
+                            .show();
+                } else {
+                    Toast.makeText(this,
+                            "FCM can't post notifications without POST_NOTIFICATIONS permission",
+                            Toast.LENGTH_LONG).show();
+                }
+            });
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        binding = ActivityMainBinding.inflate(getLayoutInflater());
+        setContentView(binding.getRoot());
 
-        mFirstNumberField = findViewById(R.id.fieldFirstNumber);
-        mSecondNumberField = findViewById(R.id.fieldSecondNumber);
-        mAddResultField = findViewById(R.id.fieldAddResult);
-        mCalculateButton = findViewById(R.id.buttonCalculate);
-        mCalculateButton.setOnClickListener(this);
-
-        mMessageInputField = findViewById(R.id.fieldMessageInput);
-        mMessageOutputField = findViewById(R.id.fieldMessageOutput);
-        mAddMessageButton = findViewById(R.id.buttonAddMessage);
-        mSignInButton = findViewById(R.id.buttonSignIn);
-        mAddMessageButton.setOnClickListener(this);
-        mSignInButton.setOnClickListener(this);
+        binding.buttonCalculate.setOnClickListener(this);
+        binding.buttonAddMessage.setOnClickListener(this);
+        binding.buttonSignIn.setOnClickListener(this);
 
         // [START initialize_functions_instance]
         mFunctions = FirebaseFunctions.getInstance();
         // [END initialize_functions_instance]
+
+        askNotificationPermission();
     }
 
     // [START function_add_numbers]
@@ -149,8 +155,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         hideKeyboard();
 
         try {
-            firstNumber = Integer.parseInt(mFirstNumberField.getText().toString());
-            secondNumber = Integer.parseInt(mSecondNumberField.getText().toString());
+            firstNumber = Integer.parseInt(binding.fieldFirstNumber.getText().toString());
+            secondNumber = Integer.parseInt(binding.fieldSecondNumber.getText().toString());
         } catch (NumberFormatException e) {
             showSnackbar("Please enter two numbers.");
             return;
@@ -184,7 +190,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
                         // [START_EXCLUDE]
                         Integer result = task.getResult();
-                        mAddResultField.setText(String.valueOf(result));
+                        binding.fieldAddResult.setText(String.valueOf(result));
                         // [END_EXCLUDE]
                     }
                 });
@@ -192,7 +198,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     private void onAddMessageClicked() {
-        String inputMessage = mMessageInputField.getText().toString();
+        String inputMessage = binding.fieldMessageInput.getText().toString();
 
         if (TextUtils.isEmpty(inputMessage)) {
             showSnackbar("Please enter a message.");
@@ -221,7 +227,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
                         // [START_EXCLUDE]
                         String result = task.getResult();
-                        mMessageOutputField.setText(result);
+                        binding.fieldMessageOutput.setText(result);
                         // [END_EXCLUDE]
                     }
                 });
@@ -242,52 +248,64 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     private void signIn() {
+        ActivityResultLauncher<Intent> signInLauncher =
+                registerForActivityResult(new FirebaseAuthUIActivityResultContract(), this::onSignInResult);
+
         Intent signInIntent = AuthUI.getInstance()
                 .createSignInIntentBuilder()
                 .setAvailableProviders(Collections.singletonList(
                         new AuthUI.IdpConfig.EmailBuilder().build()))
-                .setIsSmartLockEnabled(false)
+                .setCredentialManagerEnabled(false)
                 .build();
 
-        startActivityForResult(signInIntent, RC_SIGN_IN);
+        signInLauncher.launch(signInIntent);
     }
 
     private void hideKeyboard() {
         View view = this.getCurrentFocus();
         if (view != null) {
-            InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
             imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
         }
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
+    private void onSignInResult(FirebaseAuthUIAuthenticationResult result) {
+        if (result.getResultCode() == RESULT_OK) {
+            showSnackbar("Signed in.");
+        } else {
+            showSnackbar("Error signing in.");
 
-        if (requestCode == RC_SIGN_IN) {
-            if (resultCode == RESULT_OK) {
-                showSnackbar("Signed in.");
-            } else {
-                showSnackbar("Error signing in.");
-
-                IdpResponse response = IdpResponse.fromResultIntent(data);
-                Log.w(TAG, "signIn", response.getError());
-            }
+            IdpResponse response = result.getIdpResponse();
+            Log.w(TAG, "signIn", response.getError());
         }
     }
 
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.buttonCalculate:
-                onCalculateClicked();
-                break;
-            case R.id.buttonAddMessage:
-                onAddMessageClicked();
-                break;
-            case R.id.buttonSignIn:
-                onSignInClicked();
-                break;
+        //Due to bump in Java version, we can not use view ids in switch
+        //(see: http://tools.android.com/tips/non-constant-fields), so we
+        //need to use if/else:
+
+        int viewId = view.getId();
+        if (viewId == R.id.buttonCalculate) {
+            onCalculateClicked();
+        } else if (viewId == R.id.buttonAddMessage) {
+            onAddMessageClicked();
+        } else if (viewId == R.id.buttonSignIn) {
+            onSignInClicked();
+        }
+    }
+
+    private void askNotificationPermission() {
+        // This is only necessary for API level >= 33 (TIRAMISU)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+                    PackageManager.PERMISSION_GRANTED) {
+                // FCM SDK (and your app) can post notifications.
+            } else{
+                // Directly ask for the permission
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
+            }
         }
     }
 }

@@ -849,10 +849,10 @@
     {
       "client_info": {
         "mobilesdk_app_id": "1:123456789000:android:f1bf012572b04063",
-        "client_id": "android:com.google.firebase.samples.apps.mlkit.languageid",
+        "client_id": "android:com.google.firebase.appdistributionquickstart",
         "client_type": 1,
         "android_client_info": {
-          "package_name": "com.google.firebase.samples.apps.mlkit.languageid",
+          "package_name": "com.google.firebase.appdistributionquickstart",
           "certificate_hash": []
         }
       },
@@ -861,7 +861,7 @@
           "client_id": "123456789000-hjugbg6ud799v4c49dim8ce2usclthar.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.google.firebase.samples.apps.mlkit.languageid",
+            "package_name": "com.google.firebase.appdistributionquickstart",
             "certificate_hash": "4C20644DE36B8F89D25650C7D1FF9FBAE650FDF7"
           }
         },
@@ -955,6 +955,63 @@
           "status": 2,
           "test_banner_ad_unit_id": "ca-app-pub-3940256099942544/6300978111",
           "test_interstitial_ad_unit_id": "ca-app-pub-3940256099942544/1033173712"
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:474448463284:android:c76572afd2f0ba8d97e8e1",
+        "android_client_info": {
+          "package_name": "com.google.firebase.example.dataconnect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCPndbsEs_QWumL5_B0BpNLuMkvVSecvL0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:474448463284:android:c76572afd2f0ba8d97e8e1",
+        "android_client_info": {
+          "package_name": "com.google.firebase.quickstart.vertexai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCPndbsEs_QWumL5_B0BpNLuMkvVSecvL0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:474448463284:android:c76572afd2f0ba8d97e8e1",
+        "android_client_info": {
+          "package_name": "com.google.firebase.quickstart.ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCPndbsEs_QWumL5_B0BpNLuMkvVSecvL0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
         }
       }
     }

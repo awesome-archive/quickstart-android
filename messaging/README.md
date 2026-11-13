@@ -17,6 +17,21 @@ Getting Started
 - [Add Firebase to your Android Project](https://firebase.google.com/docs/android/setup).
 - Run the sample on Android device or emulator.
 
+**NOTE**: This sample contains identical code for both Java and Kotlin.
+However, there can only be one service in each app that receives FCM
+messages. If multiple are declared in the Manifest then the first
+one will be chosen.
+
+In order to make the Java messaging sample functional, you must
+remove the following from the `.kotlin.MyFirebaseMessagingService` entry
+in the `AndroidManifest.xml`:
+
+```
+<intent-filter>
+  <action android:name="com.google.firebase.MESSAGING_EVENT" />
+</intent-filter>
+```
+
 Sending Notifications
 ---------------------
 
@@ -83,7 +98,7 @@ You can also define what color is used with your notification. Different android
 versions use this settings in different ways: Android < N use this as background color
 for the icon. Android >= N use this to color the icon and the app name.
 
-See the [docs](https://goo.gl/sPggnS) for more.
+See the [docs](https://firebase.google.com/docs/cloud-messaging/android/receive#edit-the-app-manifest) for more.
 
 Result
 -----------

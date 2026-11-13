@@ -2,20 +2,26 @@ package com.google.firebase.quickstart.analytics.kotlin
 
 import android.content.Intent
 import android.os.Bundle
-import android.preference.PreferenceManager
-import android.support.v4.app.Fragment
-import android.support.v4.app.FragmentManager
-import android.support.v4.app.FragmentPagerAdapter
-import android.support.v4.view.ViewPager
-import android.support.v7.app.AlertDialog
-import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
+import androidx.lifecycle.Lifecycle
+import androidx.preference.PreferenceManager
+import androidx.viewpager2.adapter.FragmentStateAdapter
+import androidx.viewpager2.widget.ViewPager2
+import com.google.android.material.tabs.TabLayout
+import com.google.android.material.tabs.TabLayoutMediator
+import com.google.firebase.Firebase
 import com.google.firebase.analytics.FirebaseAnalytics
+import com.google.firebase.analytics.analytics
+import com.google.firebase.analytics.logEvent
 import com.google.firebase.quickstart.analytics.R
-import kotlinx.android.synthetic.main.activity_main.pagerTabStrip
-import kotlinx.android.synthetic.main.activity_main.viewPager
+import com.google.firebase.quickstart.analytics.databinding.ActivityMainBinding
+import com.google.firebase.quickstart.analytics.kotlin.MainActivity.Companion.IMAGE_INFOS
 import java.util.Locale
 
 /**
@@ -31,13 +37,15 @@ class MainActivity : AppCompatActivity() {
             ImageInfo(R.drawable.favorite, R.string.pattern1_title, R.string.pattern1_id),
             ImageInfo(R.drawable.flash, R.string.pattern2_title, R.string.pattern2_id),
             ImageInfo(R.drawable.face, R.string.pattern3_title, R.string.pattern3_id),
-            ImageInfo(R.drawable.whitebalance, R.string.pattern4_title, R.string.pattern4_id)
+            ImageInfo(R.drawable.whitebalance, R.string.pattern4_title, R.string.pattern4_id),
         )
     }
 
+    private lateinit var binding: ActivityMainBinding
+
     /**
-     * The [android.support.v4.view.PagerAdapter] that will provide fragments for each image.
-     * This uses a [FragmentPagerAdapter], which keeps every loaded fragment in memory.
+     * The [androidx.viewpager2.widget.PagerAdapter] that will provide fragments for each image.
+     * This uses a [FragmentStateAdapter], which keeps every loaded fragment in memory.
      */
     private lateinit var imagePagerAdapter: ImagePagerAdapter
 
@@ -50,11 +58,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         // [START shared_app_measurement]
         // Obtain the FirebaseAnalytics instance.
-        firebaseAnalytics = FirebaseAnalytics.getInstance(this)
+        firebaseAnalytics = Firebase.analytics
         // [END shared_app_measurement]
 
         // On first app open, ask the user his/her favorite food. Then set this as a user property
@@ -67,22 +76,24 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Create the adapter that will return a fragment for each image.
-        imagePagerAdapter = ImagePagerAdapter(supportFragmentManager, IMAGE_INFOS)
+        imagePagerAdapter = ImagePagerAdapter(supportFragmentManager, IMAGE_INFOS, lifecycle)
 
         // Set up the ViewPager with the pattern adapter.
-        viewPager.adapter = imagePagerAdapter
+        binding.viewPager.adapter = imagePagerAdapter
 
-        // Workaround for AppCompat issue not showing ViewPager titles
-        val params = pagerTabStrip.layoutParams as ViewPager.LayoutParams
-        params.isDecor = true
-
-        // When the visible image changes, send a screen view hit.
-        viewPager.addOnPageChangeListener(object : ViewPager.SimpleOnPageChangeListener() {
+        val pageChangedCallback = object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 recordImageView()
                 recordScreenView()
             }
-        })
+        }
+
+        binding.viewPager.registerOnPageChangeCallback(pageChangedCallback)
+
+        val tabLayout: TabLayout = binding.tabLayout
+        TabLayoutMediator(tabLayout, binding.viewPager) { tab, position ->
+            tab.setText(IMAGE_INFOS[position].title)
+        }.attach()
 
         // Send initial screen screen view hit.
         recordImageView()
@@ -100,12 +111,12 @@ class MainActivity : AppCompatActivity() {
     private fun askFavoriteFood() {
         val choices = resources.getStringArray(R.array.food_items)
         val ad = AlertDialog.Builder(this)
-                .setCancelable(false)
-                .setTitle(R.string.food_dialog_title)
-                .setItems(choices) { _, which ->
-                    val food = choices[which]
-                    setUserFavoriteFood(food)
-                }.create()
+            .setCancelable(false)
+            .setTitle(R.string.food_dialog_title)
+            .setItems(choices) { _, which ->
+                val food = choices[which]
+                setUserFavoriteFood(food)
+            }.create()
 
         ad.show()
     }
@@ -116,7 +127,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun getUserFavoriteFood(): String? {
         return PreferenceManager.getDefaultSharedPreferences(this)
-                .getString(KEY_FAVORITE_FOOD, null)
+            .getString(KEY_FAVORITE_FOOD, null)
     }
 
     /**
@@ -127,8 +138,8 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "setFavoriteFood: $food")
 
         PreferenceManager.getDefaultSharedPreferences(this).edit()
-                .putString(KEY_FAVORITE_FOOD, food)
-                .apply()
+            .putString(KEY_FAVORITE_FOOD, food)
+            .apply()
 
         // [START user_property]
         firebaseAnalytics.setUserProperty("favorite_food", food)
@@ -153,10 +164,10 @@ class MainActivity : AppCompatActivity() {
             startActivity(sendIntent)
 
             // [START custom_event]
-            val params = Bundle()
-            params.putString("image_name", name)
-            params.putString("full_text", text)
-            firebaseAnalytics.logEvent("share_image", params)
+            firebaseAnalytics.logEvent("share_image") {
+                param("image_name", name)
+                param("full_text", text)
+            }
             // [END custom_event]
         }
         return false
@@ -168,7 +179,7 @@ class MainActivity : AppCompatActivity() {
      * @return title of image
      */
     private fun getCurrentImageTitle(): String {
-        val position = viewPager.currentItem
+        val position = binding.viewPager.currentItem
         val info = IMAGE_INFOS[position]
         return getString(info.title)
     }
@@ -179,25 +190,25 @@ class MainActivity : AppCompatActivity() {
      * @return id of image
      */
     private fun getCurrentImageId(): String {
-        val position = viewPager.currentItem
+        val position = binding.viewPager.currentItem
         val info = IMAGE_INFOS[position]
         return getString(info.id)
     }
 
     /**
      * Record a screen view for the visible [ImageFragment] displayed
-     * inside [FragmentPagerAdapter].
+     * inside [FragmentStateAdapter].
      */
     private fun recordImageView() {
         val id = getCurrentImageId()
         val name = getCurrentImageTitle()
 
         // [START image_view_event]
-        val bundle = Bundle()
-        bundle.putString(FirebaseAnalytics.Param.ITEM_ID, id)
-        bundle.putString(FirebaseAnalytics.Param.ITEM_NAME, name)
-        bundle.putString(FirebaseAnalytics.Param.CONTENT_TYPE, "image")
-        firebaseAnalytics.logEvent(FirebaseAnalytics.Event.SELECT_CONTENT, bundle)
+        firebaseAnalytics.logEvent(FirebaseAnalytics.Event.SELECT_ITEM) {
+            param(FirebaseAnalytics.Param.ITEM_ID, id)
+            param(FirebaseAnalytics.Param.ITEM_NAME, name)
+            param(FirebaseAnalytics.Param.CONTENT_TYPE, "image")
+        }
         // [END image_view_event]
     }
 
@@ -206,37 +217,41 @@ class MainActivity : AppCompatActivity() {
      * we change fragments.
      */
     private fun recordScreenView() {
-        // This string must be <= 36 characters long in order for setCurrentScreen to succeed.
+        // This string must be <= 36 characters long.
         val screenName = "${getCurrentImageId()}-${getCurrentImageTitle()}"
 
         // [START set_current_screen]
-        firebaseAnalytics.setCurrentScreen(this, screenName, null /* class override */)
+        firebaseAnalytics.logEvent(FirebaseAnalytics.Event.SCREEN_VIEW) {
+            param(FirebaseAnalytics.Param.SCREEN_NAME, screenName)
+            param(FirebaseAnalytics.Param.SCREEN_CLASS, "MainActivity")
+        }
         // [END set_current_screen]
     }
 
     /**
-     * A [FragmentPagerAdapter] that returns a fragment corresponding to
+     * A [FragmentStateAdapter] that returns a fragment corresponding to
      * one of the sections/tabs/pages.
      */
     inner class ImagePagerAdapter(
         fm: FragmentManager,
-        private val infos: Array<ImageInfo>
-    ) : FragmentPagerAdapter(fm) {
+        private val infos: Array<ImageInfo>,
+        lifecyle: Lifecycle,
+    ) : FragmentStateAdapter(fm, lifecyle) {
 
-        override fun getItem(position: Int): Fragment {
-            val info = infos[position]
-            return ImageFragment.newInstance(info.image)
-        }
-
-        override fun getCount() = infos.size
-
-        override fun getPageTitle(position: Int): CharSequence? {
+        fun getPageTitle(position: Int): CharSequence? {
             if (position < 0 || position >= infos.size) {
                 return null
             }
             val l = Locale.getDefault()
             val info = infos[position]
-            return getString(info.title).toUpperCase(l)
+            return getString(info.title).uppercase(l)
+        }
+
+        override fun getItemCount(): Int = infos.size
+
+        override fun createFragment(position: Int): Fragment {
+            val info = infos[position]
+            return ImageFragment.newInstance(info.image)
         }
     }
 }

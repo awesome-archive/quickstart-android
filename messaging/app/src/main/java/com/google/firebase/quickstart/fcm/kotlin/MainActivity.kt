@@ -1,32 +1,56 @@
 package com.google.firebase.quickstart.fcm.kotlin
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.google.android.gms.tasks.OnCompleteListener
-import com.google.firebase.iid.FirebaseInstanceId
-import com.google.firebase.messaging.FirebaseMessaging
+import com.google.firebase.Firebase
+import com.google.firebase.messaging.messaging
 import com.google.firebase.quickstart.fcm.R
-import kotlinx.android.synthetic.main.activity_main.logTokenButton
-import kotlinx.android.synthetic.main.activity_main.subscribeButton
+import com.google.firebase.quickstart.fcm.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
 
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            Toast.makeText(this, "Notifications permission granted", Toast.LENGTH_SHORT)
+                .show()
+        } else {
+            Toast.makeText(
+                this,
+                "FCM can't post notifications without POST_NOTIFICATIONS permission",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        val binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // Create channel to show notifications.
             val channelId = getString(R.string.default_notification_channel_id)
             val channelName = getString(R.string.default_notification_channel_name)
             val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager?.createNotificationChannel(NotificationChannel(channelId,
-                    channelName, NotificationManager.IMPORTANCE_LOW))
+            notificationManager?.createNotificationChannel(
+                NotificationChannel(
+                    channelId,
+                    channelName,
+                    NotificationManager.IMPORTANCE_LOW,
+                ),
+            )
         }
 
         // If a notification message is tapped, any data accompanying the notification
@@ -40,46 +64,59 @@ class MainActivity : AppCompatActivity() {
         // [START handle_data_extras]
         intent.extras?.let {
             for (key in it.keySet()) {
-                val value = intent.extras.get(key)
+                val value = intent.extras?.getString(key)
                 Log.d(TAG, "Key: $key Value: $value")
             }
         }
         // [END handle_data_extras]
 
-        subscribeButton.setOnClickListener {
+        binding.subscribeButton.setOnClickListener {
             Log.d(TAG, "Subscribing to weather topic")
             // [START subscribe_topics]
-            FirebaseMessaging.getInstance().subscribeToTopic("weather")
-                    .addOnCompleteListener { task ->
-                        var msg = getString(R.string.msg_subscribed)
-                        if (!task.isSuccessful) {
-                            msg = getString(R.string.msg_subscribe_failed)
-                        }
-                        Log.d(TAG, msg)
-                        Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
+            Firebase.messaging.subscribeToTopic("weather")
+                .addOnCompleteListener { task ->
+                    var msg = getString(R.string.msg_subscribed)
+                    if (!task.isSuccessful) {
+                        msg = getString(R.string.msg_subscribe_failed)
                     }
+                    Log.d(TAG, msg)
+                    Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
+                }
             // [END subscribe_topics]
         }
 
-        logTokenButton.setOnClickListener {
-            // Get token
-            // [START retrieve_current_token]
-            FirebaseInstanceId.getInstance().instanceId
-                    .addOnCompleteListener(OnCompleteListener { task ->
-                        if (!task.isSuccessful) {
-                            Log.w(TAG, "getInstanceId failed", task.exception)
-                            return@OnCompleteListener
-                        }
+        binding.logRegistrationButton.setOnClickListener {
+            // Get FCM Registration
+            // [START log_reg]
+            Firebase.messaging.register().addOnCompleteListener(
+                OnCompleteListener { task ->
+                    if (!task.isSuccessful) {
+                        Log.w(TAG, "Fetching FCM registration failed", task.exception)
+                        return@OnCompleteListener
+                    }
 
-                        // Get new Instance ID token
-                        val token = task.result?.token
+                  // If the registration task is success, the onRegistered callback in
+                  // FirebaseMessagingService will be invoked and the registration will be logged from there.
+                },
+            )
+            // [END log_reg]
+        }
 
-                        // Log and toast
-                        val msg = getString(R.string.msg_token_fmt, token)
-                        Log.d(TAG, msg)
-                        Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
-                    })
-            // [END retrieve_current_token]
+        Toast.makeText(this, "See README for setup instructions", Toast.LENGTH_SHORT).show()
+        askNotificationPermission()
+    }
+
+    private fun askNotificationPermission() {
+        // This is only necessary for API Level > 33 (TIRAMISU)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                // FCM SDK (and your app) can post notifications.
+            } else {
+                // Directly ask for the permission
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
         }
     }
 

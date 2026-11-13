@@ -4,11 +4,14 @@ import android.app.Service
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.IBinder
-import android.support.v4.content.LocalBroadcastManager
 import android.util.Log
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.google.firebase.Firebase
 import com.google.firebase.quickstart.firebasestorage.R
-import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageReference
+import com.google.firebase.storage.component1
+import com.google.firebase.storage.component2
+import com.google.firebase.storage.storage
 
 class MyDownloadService : MyBaseTaskService() {
 
@@ -18,7 +21,7 @@ class MyDownloadService : MyBaseTaskService() {
         super.onCreate()
 
         // Initialize Storage
-        storageRef = FirebaseStorage.getInstance().reference
+        storageRef = Firebase.storage.reference
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -30,7 +33,7 @@ class MyDownloadService : MyBaseTaskService() {
 
         if (ACTION_DOWNLOAD == intent.action) {
             // Get the path to download from the intent
-            val downloadPath = intent.getStringExtra(EXTRA_DOWNLOAD_PATH)
+            val downloadPath = intent.getStringExtra(EXTRA_DOWNLOAD_PATH)!!
             downloadFromPath(downloadPath)
         }
 
@@ -45,8 +48,7 @@ class MyDownloadService : MyBaseTaskService() {
         showProgressNotification(getString(R.string.progress_downloading), 0, 0)
 
         // Download and get total bytes
-        storageRef.child(downloadPath).getStream { taskSnapshot, inputStream ->
-            val totalBytes = taskSnapshot.totalByteCount
+        storageRef.child(downloadPath).getStream { (_, totalBytes), inputStream ->
             var bytesDownloaded: Long = 0
 
             val buffer = ByteArray(1024)
@@ -54,20 +56,23 @@ class MyDownloadService : MyBaseTaskService() {
 
             while (size != -1) {
                 bytesDownloaded += size.toLong()
-                showProgressNotification(getString(R.string.progress_downloading),
-                        bytesDownloaded, totalBytes)
+                showProgressNotification(
+                    getString(R.string.progress_downloading),
+                    bytesDownloaded,
+                    totalBytes,
+                )
 
                 size = inputStream.read(buffer)
             }
 
             // Close the stream at the end of the Task
             inputStream.close()
-        }.addOnSuccessListener { taskSnapshot ->
+        }.addOnSuccessListener { (_, totalBytes) ->
             Log.d(TAG, "download:SUCCESS")
 
             // Send success broadcast with number of bytes downloaded
-            broadcastDownloadFinished(downloadPath, taskSnapshot.totalByteCount)
-            showDownloadFinishedNotification(downloadPath, taskSnapshot.totalByteCount.toInt())
+            broadcastDownloadFinished(downloadPath, totalBytes)
+            showDownloadFinishedNotification(downloadPath, totalBytes.toInt())
 
             // Mark task completed
             taskCompleted()
@@ -92,10 +97,10 @@ class MyDownloadService : MyBaseTaskService() {
         val action = if (success) DOWNLOAD_COMPLETED else DOWNLOAD_ERROR
 
         val broadcast = Intent(action)
-                .putExtra(EXTRA_DOWNLOAD_PATH, downloadPath)
-                .putExtra(EXTRA_BYTES_DOWNLOADED, bytesDownloaded)
+            .putExtra(EXTRA_DOWNLOAD_PATH, downloadPath)
+            .putExtra(EXTRA_BYTES_DOWNLOADED, bytesDownloaded)
         return LocalBroadcastManager.getInstance(applicationContext)
-                .sendBroadcast(broadcast)
+            .sendBroadcast(broadcast)
     }
 
     /**
@@ -107,9 +112,9 @@ class MyDownloadService : MyBaseTaskService() {
 
         // Make Intent to MainActivity
         val intent = Intent(this, MainActivity::class.java)
-                .putExtra(EXTRA_DOWNLOAD_PATH, downloadPath)
-                .putExtra(EXTRA_BYTES_DOWNLOADED, bytesDownloaded)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(EXTRA_DOWNLOAD_PATH, downloadPath)
+            .putExtra(EXTRA_BYTES_DOWNLOADED, bytesDownloaded)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
         val success = bytesDownloaded != -1
         val caption = if (success) {

@@ -24,19 +24,36 @@ import android.content.Intent;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
-import android.support.v4.app.NotificationCompat;
+import android.os.Handler;
+import android.os.Looper;
+import android.widget.Toast;
+import androidx.annotation.NonNull;
+import androidx.core.app.NotificationCompat;
 import android.util.Log;
 
-import com.firebase.jobdispatcher.FirebaseJobDispatcher;
-import com.firebase.jobdispatcher.GooglePlayDriver;
-import com.firebase.jobdispatcher.Job;
+import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 import com.google.firebase.quickstart.fcm.R;
 
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.WorkManager;
+
+/**
+ * NOTE: There can only be one service in each app that receives FCM messages. If multiple
+ * are declared in the Manifest then the first one will be chosen.
+ *
+ * In order to make this Java sample functional, you must remove the following from the Kotlin messaging
+ * service in the AndroidManifest.xml:
+ *
+ * <intent-filter>
+ *   <action android:name="com.google.firebase.MESSAGING_EVENT" />
+ * </intent-filter>
+ */
 public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
     private static final String TAG = "MyFirebaseMsgService";
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
     /**
      * Called when message is received.
@@ -71,7 +88,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             Log.d(TAG, "Message data payload: " + remoteMessage.getData());
 
             if (/* Check if data needs to be processed by long running job */ true) {
-                // For long-running tasks (10 seconds or more) use Firebase Job Dispatcher.
+                // For long-running tasks (10 seconds or more) use WorkManager.
                 scheduleJob();
             } else {
                 // Handle message within 10 seconds
@@ -83,6 +100,10 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         // Check if message contains a notification payload.
         if (remoteMessage.getNotification() != null) {
             Log.d(TAG, "Message Notification Body: " + remoteMessage.getNotification().getBody());
+            String notificationBody = remoteMessage.getNotification().getBody();
+            if (remoteMessage.getNotification().getBody() != null) {
+                sendNotification(notificationBody);
+            }
         }
 
         // Also if you intend on generating your own notifications as a result of a received FCM
@@ -91,35 +112,79 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     // [END receive_message]
 
 
-    // [START on_new_token]
+    // [START onRegistered]
+  /**
+   * Called when the current app instance has been successfully registered with FCM.
+   *
+   * <p>This method provides the unique Firebase Installation ID (FID), which should be used to
+   * target this app instance for direct-send messaging.
+   *
+   * <p>This callback is triggered in the following scenarios:
+   *
+   * <ul>
+   *   <li>When the registration first succeeds after app install (if auto-init is enabled).
+   *   <li>When the registration is refreshed due to invalidation or updates (if auto-init is
+   *       enabled).
+   *   <li>Immediately after a direct call to {@link FirebaseMessaging#register()}.
+   * </ul>
+   *
+   * <p>Ensure the provided `installationId` is uploaded if it hasn't been previously or it might
+   * have been deleted on 404s.
+   *
+   * <p><b>Note:</b> To use this API, you must enable it by adding {@code <meta-data
+   * android:name="firebase_messaging_installation_id_enabled" android:value="true" />} to your
+   * app's manifest.
+   *
+   * @param installationId The Firebase Installation ID used for sending messages to the current app
+   *     instance.
+   */
+  @Override
+  public void onRegistered(@NonNull String installationId) {
+    Log.d(TAG, "Registration: " + installationId);
+
+    // If you want to send messages to this application instance or
+    // manage these apps subscriptions on the server side, send the
+    // FCM registration to your app server.
+    sendRegistrationToServer(installationId);
+
+    // Log and toast
+    String msg = getString(R.string.msg_registration_fmt, installationId);
+    Log.d(TAG, msg);
+    handler.post(() -> Toast.makeText(getBaseContext(), msg, Toast.LENGTH_SHORT).show());
+  }
+  // [END onRegistered]
+
+  // [START onUnregistered]
+  /**
+   * Called when the current app instance has been successfully unregistered from FCM via a call to
+   * {@code FirebaseMessaging.unregister()}.
+   *
+   * <p>This method confirms that the specified FID is no longer active for receiving FCM messages.
+   *
+   * <p><b>Note:</b> To use this API, you must enable it by adding {@code <meta-data
+   * android:name="firebase_messaging_installation_id_enabled" android:value="true" />} to your
+   * app's manifest.
+   *
+   * @param installationId The Firebase Installation ID of the current app instance that was
+   *     unregistered with FCM.
+   */
+  @Override
+  public void onUnregistered(@NonNull String installationId) {
+    // Remove FCM registration associated with the app instance on the app server
+    // so that the app server will not try to send FCM messages to the un registered app instance.
+    removeRegistrationFromServer(installationId);
+  }
+
+  // [END onUnregistered]
 
     /**
-     * Called if InstanceID token is updated. This may occur if the security of
-     * the previous token had been compromised. Note that this is called when the InstanceID token
-     * is initially generated so this is where you would retrieve the token.
-     */
-    @Override
-    public void onNewToken(String token) {
-        Log.d(TAG, "Refreshed token: " + token);
-
-        // If you want to send messages to this application instance or
-        // manage this apps subscriptions on the server side, send the
-        // Instance ID token to your app server.
-        sendRegistrationToServer(token);
-    }
-    // [END on_new_token]
-
-    /**
-     * Schedule a job using FirebaseJobDispatcher.
+     * Schedule async work using WorkManager.
      */
     private void scheduleJob() {
         // [START dispatch_job]
-        FirebaseJobDispatcher dispatcher = new FirebaseJobDispatcher(new GooglePlayDriver(this));
-        Job myJob = dispatcher.newJobBuilder()
-                .setService(MyJobService.class)
-                .setTag("my-job-tag")
+        OneTimeWorkRequest work = new OneTimeWorkRequest.Builder(MyWorker.class)
                 .build();
-        dispatcher.schedule(myJob);
+        WorkManager.getInstance(this).beginWith(work).enqueue();
         // [END dispatch_job]
     }
 
@@ -131,16 +196,28 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     }
 
     /**
-     * Persist token to third-party servers.
+     * Persist registration to third-party servers.
      *
-     * Modify this method to associate the user's FCM InstanceID token with any server-side account
-     * maintained by your application.
+     * Modify this method to associate the user's FCM registration with any
+     * server-side account maintained by your application.
      *
-     * @param token The new token.
+     * @param registration The new FCM registration.
      */
-    private void sendRegistrationToServer(String token) {
-        // TODO: Implement this method to send token to your app server.
+    private void sendRegistrationToServer(String registration) {
+        // TODO: Implement this method to send FCM registration to your app server.
     }
+
+  /**
+   * Remove registration from third-party servers.
+   *
+   * Modify this method to disassociate the user's FCM registration with any
+   * server-side account maintained by your application.
+   *
+   * @param registration The FCM registration which is unregistered.
+   */
+  private void removeRegistrationFromServer(String registration) {
+    // TODO: Implement this method to remove FCM registration from your app server.
+  }
 
     /**
      * Create and show a simple notification containing the received FCM message.
@@ -151,7 +228,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         Intent intent = new Intent(this, MainActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0 /* Request code */, intent,
-                PendingIntent.FLAG_ONE_SHOT);
+                PendingIntent.FLAG_IMMUTABLE);
 
         String channelId = getString(R.string.default_notification_channel_id);
         Uri defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
